@@ -26,6 +26,8 @@ Bot downloads songs in ```~/Music``` by default and uses them if needed again. I
 
 Also if Youtube is filterd on your internet, you have to run a socks proxy on port **2080** and use the bot. Otherwise open mmb.py and remove any ```--proxy, PROXY``` from file.
 
+NOTE: You have to download your cookies from browser and set 'COOKIES' value in the mmb.py to cookies.txt path.
+
 For help:
 ```bash
 mmb

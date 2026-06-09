@@ -14,6 +14,7 @@ DB_PATH = Path.home() / ".songbot.db"
 SOCK = "/tmp/songbot.sock"
 PLAYER = "mpv"
 PROXY = "socks5://127.0.0.1:2080"
+COOKIES = "/path/to/cookies.txt"
 
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -111,13 +112,13 @@ def find_existing(title):
 def download(query):
     if query.startswith("http"):
         title = subprocess.check_output(
-            ["yt-dlp", "--no-check-certificate", "--proxy", PROXY, "--cookies", "/home/mammad/Music/cookies/cookies.txt", "--get-title", query],
+            ["yt-dlp", "--no-check-certificate", "--proxy", PROXY, "--cookies", COOKIES, "--get-title", query],
             text=True
         ).strip()
         target = query
     else:
         title = subprocess.check_output(
-            ["yt-dlp", "--no-check-certificate", "--proxy", PROXY, "--cookies", "/home/mammad/Music/cookies/cookies.txt", "--get-title", f"ytsearch1:{query}"],
+            ["yt-dlp", "--no-check-certificate", "--proxy", PROXY, "--cookies", COOKIES, "--get-title", f"ytsearch1:{query}"],
             text=True
         ).strip()
         target = f"ytsearch1:{query}"
@@ -134,19 +135,15 @@ def download(query):
         "--no-check-certificate", 
         "--proxy", PROXY,
         "--no-playlist",
-        "--cookies", "/home/mammad/Music/cookies/cookies.txt",
-        #"--js-runtimes", "quickjs",
+        "--cookies", COOKIES,
         "-q",
         "-f", "ba",
-        # "-x",
-        # "--audio-format", "vorbis",
         "--audio-quality", "0",
         "-o", str(OUTDIR / "%(title)s.%(ext)s"),
         target
     ], check=True)
 
     # find newest file
-    # files = sorted(OUTDIR.glob("*.ogg"), key=os.path.getmtime, reverse=True)
     files = sorted(
                 OUTDIR.glob("*"),
                 key=os.path.getmtime,
@@ -182,14 +179,6 @@ def queue_add(file):
 
 def queue_next():
     mpv(["playlist-next"])
-
-# def queue_list():
-#     cur.execute("SELECT file FROM queue")
-#     rows = cur.fetchall()
-#     if not rows:
-#         print("Queue empty")
-#     for i, (f,) in enumerate(rows, 1):
-#         print(f"{i}. {f}")
 
 def queue_list():
     playlist_resp = mpv_query(["get_property", "playlist"])
