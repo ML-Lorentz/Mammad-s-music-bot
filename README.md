@@ -36,6 +36,7 @@ mmb
 #### Commands:
 
 - add(a): Add a song to queue ``` mmb add "Music name"``` or ```mmb add <url>```
+- search(sr): search for a song ``` mmb sr "schubert serenade"```
 - pause(p): Pauses the player
 - resume(r): Resume the player
 - next(n): Skip currently playing song
@@ -43,5 +44,5 @@ mmb
 - queue(q): List upcoming queue
 - seek(sk): Seek forward or backward (negative or positive number in sec)
 - loop(l): Turn loop on
-- loop(l) off: Turn loop off
+- loopoff(lo): Turn loop off
 - status(st): Show bot status
