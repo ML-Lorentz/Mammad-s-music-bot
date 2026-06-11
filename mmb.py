@@ -3,12 +3,12 @@ import os, sys, json, time, sqlite3, socket, subprocess
 from pathlib import Path
 
 # ---------------- CONFIG ----------------
-OUTDIR = Path.home()
+OUTDIR = Path.home() / "Music"
 DB_PATH = Path.home() / ".songbot.db"
 SOCK = "/tmp/songbot.sock"
 PLAYER = "mpv"
 PROXY = "socks5://127.0.0.1:2080"
-COOKIES = "/home/mammad/Music/cookies/cookies.txt"
+COOKIES = "/path/to/your/cookies.txt"
 
 OUTDIR.mkdir(parents=True, exist_ok=True)
 
@@ -148,6 +148,67 @@ def download(query):
 
     conn.commit()
     return file
+
+def youtube_search(query):
+    lines = subprocess.check_output(
+        [
+            "yt-dlp",
+            "--proxy", PROXY,
+            "--cookies", COOKIES,
+            "--no-check-certificate",
+            "--print",
+            "%(title)s|||%(webpage_url)s|||%(duration_string)s",
+            f"ytsearch5:{query}",
+        ],
+        text=True,
+    ).splitlines()
+
+    if not lines:
+        print("No results.")
+        return
+
+    results = []
+
+    print("\n🔎 YouTube results\n")
+
+    for i, line in enumerate(lines, 1):
+        try:
+            title, url, dur = line.split("|||")
+        except ValueError:
+            continue
+
+        results.append((title, url))
+        print(f"{i}. {title} ({dur})")
+
+    choice = input("\nChoose [1-5] (Enter=cancel): ").strip()
+
+    if not choice:
+        return
+
+    try:
+        idx = int(choice) - 1
+        if idx < 0 or idx >= len(results):
+            return
+    except:
+        return
+
+    selected_title, selected_url = results[idx]
+    alias = input("Alias (Enter to skip): ").strip()
+
+    file = download(selected_url)
+
+    cur.execute(
+            "SELECT id FROM songs WHERE file=?",
+            (file,)
+            )
+    row = cur.fetchone()
+
+    if row:
+        if alias:
+            add_alias(row[0], alias)
+
+    queue_add(file)
+    print(f"Queued: {file}")
 
 # ---------------- QUEUE ----------------
 def queue_add(f):
@@ -299,7 +360,7 @@ def search(text):
 def main():
     ensure_mpv()
     if len(sys.argv)<2:
-        print("Usage: mmb add(a) | pause(p) | resume(r) | next(n) | stop(s) | queue(q) | seek(sk) | loop(l) | nowplaying(np) | search(sr)")
+        print("Usage: mmb add(a) | pause(p) | resume(r) | next(n) | stop(s) | queue(q) | seek(sk) | loop(l) | nowplaying(np) | search(sr) | ytsearch(y)")
         return
 
     c=sys.argv[1]; a=sys.argv[2:]
@@ -317,6 +378,7 @@ def main():
     elif c in ("search", "sr") and a: search(" ".join(a))
     elif c in ("loop", "l"): loop(True)
     elif c in ("loopoff", "lo"): loop(False)
+    elif c in ("ytsearch", "y") and a: youtube_search(" ".join(a))
     else:
         print("Unknown command!")
 

@@ -35,8 +35,9 @@ mmb
 
 #### Commands:
 
-- add(a): Add a song to queue ``` mmb add "Music name"``` or ```mmb add <url>```
-- search(sr): search for a already downloaded song ``` mmb sr "schubert serenade"```
+- add(a): Add a song to queue ```mmb add "Music name"``` or ```mmb add <url>```
+- search(sr): search for a already downloaded song ```mmb sr "schubert serenade"```
+- ytsearch(y): search for a song and choose which one to play ```mmb y "high and dry"```
 - pause(p): Pauses the player
 - resume(r): Resume the player
 - next(n): Skip currently playing song
