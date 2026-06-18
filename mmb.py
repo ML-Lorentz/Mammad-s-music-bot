@@ -31,6 +31,20 @@ def init_db():
         query TEXT UNIQUE
     )
     """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS playlists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE
+    )
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS playlist_songs (
+        playlist_id INTEGER,
+        song_id INTEGER,
+        position INTEGER,
+        PRIMARY KEY (playlist_id, position)
+    )
+    """)
     conn.commit()
 
 init_db()
@@ -356,6 +370,328 @@ def search(text):
     except:
         pass
 
+# ---------------- PLAYLISTS ----------------
+
+def playlist_create(name):
+    cur.execute(
+        "INSERT OR IGNORE INTO playlists(name) VALUES (?)",
+        (name,)
+    )
+    conn.commit()
+    print(f"Created playlist: {name}")
+
+def playlist_list():
+    cur.execute("SELECT name FROM playlists ORDER BY name")
+
+    rows = cur.fetchall()
+
+    if not rows:
+        print("No playlists")
+        return
+
+    print("📚 Playlists")
+
+    for i, (name,) in enumerate(rows, 1):
+        print(f"{i}. {name}")
+
+def playlist_show(name):
+    cur.execute(
+        """
+        SELECT s.title
+        FROM playlist_songs ps
+        JOIN playlists p ON p.id = ps.playlist_id
+        JOIN songs s ON s.id = ps.song_id
+        WHERE p.name = ?
+        ORDER BY ps.position
+        """,
+        (name,)
+    )
+
+    rows = cur.fetchall()
+
+    if not rows:
+        print("Playlist empty")
+        return
+
+    print(f"📋 {name}")
+
+    for i, (title,) in enumerate(rows, 1):
+        print(f"{i}. {title}")
+
+def playlist_add(name, query):
+    file = download(query)
+
+    cur.execute(
+        "SELECT id FROM songs WHERE file=?",
+        (file,)
+    )
+
+    row = cur.fetchone()
+
+    if not row:
+        print("Song not found")
+        return
+
+    song_id = row[0]
+
+    cur.execute(
+        "SELECT id FROM playlists WHERE name=?",
+        (name,)
+    )
+
+    row = cur.fetchone()
+
+    if not row:
+        print("Playlist does not exist")
+        return
+
+    playlist_id = row[0]
+
+    cur.execute(
+        """
+        SELECT 1
+        FROM playlist_songs
+        WHERE playlist_id=? AND song_id=?
+        """,
+        (playlist_id, song_id)
+    )
+
+    if cur.fetchone():
+        print("Song already in playlist")
+        return
+
+    cur.execute(
+        """
+        SELECT COALESCE(MAX(position),0)+1
+        FROM playlist_songs
+        WHERE playlist_id=?
+        """,
+        (playlist_id,)
+    )
+
+    pos = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        INSERT INTO playlist_songs
+        (playlist_id, song_id, position)
+        VALUES (?, ?, ?)
+        """,
+        (playlist_id, song_id, pos)
+    )
+
+    conn.commit()
+
+    print(f"Added to {name}")
+
+def playlist_save(name):
+
+    # create playlist if it doesn't exist
+    cur.execute(
+        "INSERT OR IGNORE INTO playlists(name) VALUES (?)",
+        (name,)
+    )
+    conn.commit()
+
+    cur.execute(
+        "SELECT id FROM playlists WHERE name=?",
+        (name,)
+    )
+
+    row = cur.fetchone()
+
+    if not row:
+        print("Failed to create playlist")
+        return
+
+    playlist_id = row[0]
+
+    playlist_resp = mpv_query(["get_property", "playlist"])
+    playlist = playlist_resp.get("data")
+
+    if not playlist:
+        print("Queue empty")
+        return
+
+    # current song + upcoming songs only
+    upcoming = []
+    current_found = False
+
+    for item in playlist:
+
+        if item.get("current"):
+            current_found = True
+            upcoming.append(item)
+            continue
+
+        if current_found:
+            upcoming.append(item)
+
+    if not upcoming:
+        print("Queue empty")
+        return
+
+    added = 0
+    skipped = 0
+
+    for item in upcoming:
+
+        file = item["filename"]
+
+        cur.execute(
+            "SELECT id FROM songs WHERE file=?",
+            (file,)
+        )
+
+        row = cur.fetchone()
+
+        if not row:
+            continue
+
+        song_id = row[0]
+
+        # skip duplicates
+        cur.execute(
+            """
+            SELECT 1
+            FROM playlist_songs
+            WHERE playlist_id=? AND song_id=?
+            """,
+            (playlist_id, song_id)
+        )
+
+        if cur.fetchone():
+            skipped += 1
+            continue
+
+        cur.execute(
+            """
+            SELECT COALESCE(MAX(position),0)+1
+            FROM playlist_songs
+            WHERE playlist_id=?
+            """,
+            (playlist_id,)
+        )
+
+        pos = cur.fetchone()[0]
+
+        cur.execute(
+            """
+            INSERT INTO playlist_songs
+            (playlist_id, song_id, position)
+            VALUES (?, ?, ?)
+            """,
+            (playlist_id, song_id, pos)
+        )
+
+        added += 1
+
+    conn.commit()
+
+    print(f"📋 Playlist: {name}")
+    print(f"➕ Added: {added}")
+    print(f"⏭ Skipped: {skipped}")
+
+def playlist_play(name):
+    cur.execute(
+        """
+        SELECT s.file
+        FROM playlist_songs ps
+        JOIN playlists p ON p.id = ps.playlist_id
+        JOIN songs s ON s.id = ps.song_id
+        WHERE p.name=?
+        ORDER BY ps.position
+        """,
+        (name,)
+    )
+
+    rows = cur.fetchall()
+
+    if not rows:
+        print("Playlist empty")
+        return
+
+    for (file,) in rows:
+        queue_add(file)
+
+    print(f"Queued playlist: {name}")
+
+def playlist_remove(name, number):
+
+    cur.execute(
+        """
+        SELECT ps.playlist_id, ps.position
+        FROM playlist_songs ps
+        JOIN playlists p ON p.id = ps.playlist_id
+        WHERE p.name=?
+        ORDER BY ps.position
+        """,
+        (name,)
+    )
+
+    rows = cur.fetchall()
+
+    if not rows:
+        print("Playlist empty")
+        return
+
+    idx = number - 1
+
+    if idx < 0 or idx >= len(rows):
+        print("Invalid song number")
+        return
+
+    playlist_id, position = rows[idx]
+
+    cur.execute(
+        """
+        DELETE FROM playlist_songs
+        WHERE playlist_id=? AND position=?
+        """,
+        (playlist_id, position)
+    )
+
+    cur.execute(
+        """
+        UPDATE playlist_songs
+        SET position = position - 1
+        WHERE playlist_id=? AND position > ?
+        """,
+        (playlist_id, position)
+    )
+
+    conn.commit()
+
+    print(f"Removed song #{number} from {name}")
+
+def playlist_delete(name):
+    cur.execute(
+        "SELECT id FROM playlists WHERE name=?",
+        (name,)
+    )
+
+    row = cur.fetchone()
+
+    if not row:
+        print("Playlist not found")
+        return
+
+    pid = row[0]
+
+    cur.execute(
+        "DELETE FROM playlist_songs WHERE playlist_id=?",
+        (pid,)
+    )
+
+    cur.execute(
+        "DELETE FROM playlists WHERE id=?",
+        (pid,)
+    )
+
+    conn.commit()
+
+    print(f"Deleted playlist: {name}")
+
 # ---------------- MAIN ----------------
 def main():
     ensure_mpv()
@@ -379,6 +715,46 @@ def main():
     elif c in ("loop", "l"): loop(True)
     elif c in ("loopoff", "lo"): loop(False)
     elif c in ("ytsearch", "y") and a: youtube_search(" ".join(a))
+    elif c == "pl":
+
+        if not a:
+            playlist_list()
+
+        elif a[0] == "create" and len(a) >= 2:
+            playlist_create(a[1])
+
+        elif a[0] == "show" and len(a) >= 2:
+            playlist_show(a[1])
+
+        elif a[0] == "play" and len(a) >= 2:
+            playlist_play(a[1])
+
+        elif a[0] == "delete" and len(a) >= 2:
+            playlist_delete(a[1])
+
+        elif a[0] == "add" and len(a) >= 3:
+            playlist_add(a[1], " ".join(a[2:]))
+
+        elif a[0] == "save" and len(a) >= 2:
+            playlist_save(a[1])
+
+        elif a[0] == "rm" and len(a) >= 3:
+            try:
+                playlist_remove(a[1], int(a[2]))
+            except ValueError:
+                print("Song number must be a number")
+
+        else:
+            print("Usage:")
+            print("  mmb pl")
+            print("  mmb pl create NAME")
+            print("  mmb pl show NAME")
+            print("  mmb pl play NAME")
+            print("  mmb pl delete NAME")
+            print("  mmb pl add NAME SONG")
+            print("  mmb pl rm NAME NUMBER")
+            print("  mmb pl save NAME")
+
     else:
         print("Unknown command!")
 
