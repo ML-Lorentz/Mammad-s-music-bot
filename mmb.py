@@ -696,7 +696,7 @@ def playlist_delete(name):
 def main():
     ensure_mpv()
     if len(sys.argv)<2:
-        print("Usage: mmb add(a) | pause(p) | resume(r) | next(n) | stop(s) | queue(q) | seek(sk) | loop(l) | nowplaying(np) | search(sr) | ytsearch(y)")
+        print("Usage: mmb add(a) | pause(p) | resume(r) | next(n) | stop(s) | queue(q) | seek(sk)\n\t\tloop(l) | nowplaying(np) | search(sr) | ytsearch(y) | pl")
         return
 
     c=sys.argv[1]; a=sys.argv[2:]
